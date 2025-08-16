@@ -27,7 +27,7 @@ export async function searchFromApi(
 
     // 添加超时处理
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     const response = await fetch(apiUrl, {
       headers: API_CONFIG.search.headers,
@@ -122,7 +122,7 @@ export async function searchFromApi(
             const pageController = new AbortController();
             const pageTimeoutId = setTimeout(
               () => pageController.abort(),
-              8000
+              30000
             );
 
             const pageResponse = await fetch(pageUrl, {
