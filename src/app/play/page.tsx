@@ -675,40 +675,79 @@ function PlayPageClient() {
         setSourceSearchLoading(false);
       }
     };
-    const fetchSourcesData = async (query: string): Promise<SearchResult[]> => {
-      // 根据搜索词获取全部源信息
+    const fetchSourcesData = async (
+      query: string,
+      onResult?: (results: SearchResult[]) => void
+    ): Promise<SearchResult[]> => {
+      setSourceSearchLoading(true);
+      setSourceSearchError('');
+    
       try {
-        const response = await fetch(
-          `/api/search?q=${encodeURIComponent(query.trim())}`
-        );
-        if (!response.ok) {
-          throw new Error('搜索失败');
+        const response = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}`);
+        if (!response.ok) throw new Error('搜索失败');
+    
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error('无法读取搜索流');
+    
+        const decoder = new TextDecoder();
+        const aggregatedResults: SearchResult[] = [];
+        let buffer = '';
+        let done = false;
+    
+        while (!done) {
+          const { value, done: readerDone } = await reader.read();
+          done = readerDone;
+    
+          if (value) {
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+    
+            for (const line of lines) {
+              if (!line.trim()) continue;
+    
+              try {
+                const data = JSON.parse(line);
+                if (data.pageResults) {
+                  const filteredResults = data.pageResults.filter((result: SearchResult) => {
+                    const titleMatch =
+                      result.title.replaceAll(' ', '').toLowerCase() ===
+                      videoTitleRef.current.replaceAll(' ', '').toLowerCase();
+                    const yearMatch = videoYearRef.current
+                      ? result.year.toLowerCase() === videoYearRef.current.toLowerCase()
+                      : true;
+                    const typeMatch = searchType
+                      ? (searchType === 'tv' && result.episodes.length > 1) ||
+                        (searchType === 'movie' && result.episodes.length === 1)
+                      : true;
+                    return titleMatch && yearMatch && typeMatch;
+                  });
+    
+                  if (filteredResults.length > 0) {
+                    aggregatedResults.push(...filteredResults);
+                    setAvailableSources([...aggregatedResults]);
+                    setSourceSearchLoading(false);
+                    onResult?.(filteredResults); // 一有匹配就回调
+                  }
+                }
+              } catch (err) {
+                console.warn('解析行 JSON 失败:', err);
+              }
+            }
+          }
         }
-        const data = await response.json();
-
-        // 处理搜索结果，根据规则过滤
-        const results = data.results.filter(
-          (result: SearchResult) =>
-            result.title.replaceAll(' ', '').toLowerCase() ===
-              videoTitleRef.current.replaceAll(' ', '').toLowerCase() &&
-            (videoYearRef.current
-              ? result.year.toLowerCase() === videoYearRef.current.toLowerCase()
-              : true) &&
-            (searchType
-              ? (searchType === 'tv' && result.episodes.length > 1) ||
-                (searchType === 'movie' && result.episodes.length === 1)
-              : true)
-        );
-        setAvailableSources(results);
-        return results;
+        // 搜索完成，不管是否有结果，都停止加载
+        setSourceSearchLoading(false);
+    
+        return aggregatedResults;
       } catch (err) {
         setSourceSearchError(err instanceof Error ? err.message : '搜索失败');
         setAvailableSources([]);
         return [];
-      } finally {
-        setSourceSearchLoading(false);
       }
     };
+    
+    
 
     const initAll = async () => {
       if (!currentSource && !currentId && !videoTitle && !searchTitle) {
@@ -716,6 +755,7 @@ function PlayPageClient() {
         setLoading(false);
         return;
       }
+    
       setLoading(true);
       setLoadingStage(currentSource && currentId ? 'fetching' : 'searching');
       setLoadingMessage(
@@ -723,82 +763,59 @@ function PlayPageClient() {
           ? '🎬 正在获取视频详情...'
           : '🔍 正在搜索播放源...'
       );
-
-      let sourcesInfo = await fetchSourcesData(searchTitle || videoTitle);
-      if (
-        currentSource &&
-        currentId &&
-        !sourcesInfo.some(
-          (source) => source.source === currentSource && source.id === currentId
-        )
-      ) {
-        sourcesInfo = await fetchSourceDetail(currentSource, currentId);
-      }
-      if (sourcesInfo.length === 0) {
-        setError('未找到匹配结果');
-        setLoading(false);
-        return;
-      }
-
-      let detailData: SearchResult = sourcesInfo[0];
-      // 指定源和id且无需优选
-      if (currentSource && currentId && !needPreferRef.current) {
-        const target = sourcesInfo.find(
-          (source) => source.source === currentSource && source.id === currentId
-        );
-        if (target) {
-          detailData = target;
-        } else {
-          setError('未找到匹配结果');
-          setLoading(false);
-          return;
+    
+      let started = false; // 是否已经开始播放
+      let timeoutId: NodeJS.Timeout | null = null;
+    
+      // 启动超时计时器
+      const startTimeout = () => {
+        timeoutId = setTimeout(() => {
+          if (!started) {
+            setError('未找到匹配结果');
+            setLoading(false);
+          }
+        }, 10000); // 10秒
+      };
+    
+      startTimeout();
+    
+      await fetchSourcesData(searchTitle || videoTitle, (newResults) => {
+        if (!started && newResults.length > 0) {
+          started = true;
+          if (timeoutId) clearTimeout(timeoutId); // 有结果就清理超时
+    
+          const detailData = newResults[0];
+    
+          setCurrentSource(detailData.source);
+          setCurrentId(detailData.id);
+          setVideoYear(detailData.year);
+          setVideoTitle(detailData.title || videoTitleRef.current);
+          setVideoCover(detailData.poster);
+          setVideoDoubanId(detailData.douban_id || 0);
+          setDetail(detailData);
+    
+          if (currentEpisodeIndex >= detailData.episodes.length) {
+            setCurrentEpisodeIndex(0);
+          }
+    
+          // 规范URL参数
+          const newUrl = new URL(window.location.href);
+          newUrl.searchParams.set('source', detailData.source);
+          newUrl.searchParams.set('id', detailData.id);
+          newUrl.searchParams.set('year', detailData.year);
+          newUrl.searchParams.set('title', detailData.title);
+          newUrl.searchParams.delete('prefer');
+          window.history.replaceState({}, '', newUrl.toString());
+    
+          setLoadingStage('ready');
+          setLoadingMessage('✨ 准备就绪，即将开始播放...');
+          setTimeout(() => setLoading(false), 500);
         }
-      }
-
-      // 未指定源和 id 或需要优选，且开启优选开关
-      if (
-        (!currentSource || !currentId || needPreferRef.current) &&
-        optimizationEnabled
-      ) {
-        setLoadingStage('preferring');
-        setLoadingMessage('⚡ 正在优选最佳播放源...');
-
-        detailData = await preferBestSource(sourcesInfo);
-      }
-
-      console.log(detailData.source, detailData.id);
-
-      setNeedPrefer(false);
-      setCurrentSource(detailData.source);
-      setCurrentId(detailData.id);
-      setVideoYear(detailData.year);
-      setVideoTitle(detailData.title || videoTitleRef.current);
-      setVideoCover(detailData.poster);
-      setVideoDoubanId(detailData.douban_id || 0);
-      setDetail(detailData);
-      if (currentEpisodeIndex >= detailData.episodes.length) {
-        setCurrentEpisodeIndex(0);
-      }
-
-      // 规范URL参数
-      const newUrl = new URL(window.location.href);
-      newUrl.searchParams.set('source', detailData.source);
-      newUrl.searchParams.set('id', detailData.id);
-      newUrl.searchParams.set('year', detailData.year);
-      newUrl.searchParams.set('title', detailData.title);
-      newUrl.searchParams.delete('prefer');
-      window.history.replaceState({}, '', newUrl.toString());
-
-      setLoadingStage('ready');
-      setLoadingMessage('✨ 准备就绪，即将开始播放...');
-
-      // 短暂延迟让用户看到完成状态
-      setTimeout(() => {
-        setLoading(false);
-      }, 1000);
-    };
-
+      });
+    };    
+    
     initAll();
+    
   }, []);
 
   // 播放记录处理
