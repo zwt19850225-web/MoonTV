@@ -681,6 +681,7 @@ function PlayPageClient() {
     
     interface CachedResult {
       timestamp: number;
+      reSearch: boolean;
       results: SearchResult[];
     }
     
@@ -694,57 +695,63 @@ function PlayPageClient() {
       const cacheKey = `${CACHE_KEY_PREFIX}${query.trim().toLowerCase()}`;
       let aggregatedResults: SearchResult[] = [];
     
+      // 提前声明
+      let parsed: CachedResult | null = null;
+    
       try {
         // 1. 读取缓存
         const cached = localStorage.getItem(cacheKey);
-
+    
         if (cached) {
-          const parsed: CachedResult = JSON.parse(cached);
+          parsed = JSON.parse(cached) as CachedResult;
           if (Date.now() - parsed.timestamp < CACHE_TTL) {
             aggregatedResults = [...parsed.results];
             setAvailableSources(aggregatedResults);
             setSourceSearchLoading(false);
             onResult?.(parsed.results); // 先回调缓存
-          }else{
-            localStorage.setItem('reSearch', 'true');
+          } else {
+            parsed.reSearch = true; // 用对象标记
           }
         }
-        const reSearchValue = localStorage.getItem('reSearch');
     
         // 2. 发起流式搜索请求
-        if(reSearchValue === 'true' || reSearchValue === null){
-          const response = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}`);
+        if (!parsed || parsed.reSearch) {
+          const response = await fetch(
+            `/api/search?q=${encodeURIComponent(query.trim())}`
+          );
           if (!response.ok) throw new Error('搜索失败');
-      
-          const reader: ReadableStreamDefaultReader<Uint8Array> | undefined = response.body?.getReader();
+    
+          const reader: ReadableStreamDefaultReader<Uint8Array> | undefined =
+            response.body?.getReader();
           if (!reader) throw new Error('无法读取搜索流');
-      
+    
           const decoder = new TextDecoder();
           let buffer = '';
           let done = false;
-      
+    
           while (!done) {
             const { value, done: readerDone } = await reader.read();
             done = readerDone;
-      
+    
             if (value) {
               buffer += decoder.decode(value, { stream: true });
               const lines: string[] = buffer.split('\n');
               buffer = lines.pop() || '';
-      
+    
               for (const line of lines) {
                 if (!line.trim()) continue;
-      
+    
                 try {
                   const data = JSON.parse(line) as { pageResults?: SearchResult[] };
                   if (data.pageResults) {
-                    const filteredResults: SearchResult[] = (data.pageResults as SearchResult[]).filter(
+                    const filteredResults: SearchResult[] = data.pageResults.filter(
                       (r: SearchResult) => {
                         const titleMatch =
                           r.title.replaceAll(' ', '').toLowerCase() ===
                           videoTitleRef.current.replaceAll(' ', '').toLowerCase();
                         const yearMatch = videoYearRef.current
-                          ? r.year.toLowerCase() === videoYearRef.current.toLowerCase()
+                          ? r.year.toLowerCase() ===
+                            videoYearRef.current.toLowerCase()
                           : true;
                         const typeMatch = searchType
                           ? (searchType === 'tv' && r.episodes.length > 1) ||
@@ -753,26 +760,28 @@ function PlayPageClient() {
                         return titleMatch && yearMatch && typeMatch;
                       }
                     );
-      
+    
                     if (filteredResults.length > 0) {
-                      // 只加入缓存里没有的结果
-                      const newOnes: SearchResult[] = filteredResults.filter(
-                        (r: SearchResult) =>
-                          !aggregatedResults.some(item => item.source === r.source && item.id === r.id)
+                      const newOnes = filteredResults.filter(
+                        (r) =>
+                          !aggregatedResults.some(
+                            (item) => item.source === r.source && item.id === r.id
+                          )
                       );
-      
+    
                       if (newOnes.length > 0) {
                         aggregatedResults.push(...newOnes);
                         setAvailableSources([...aggregatedResults]);
                         setSourceSearchLoading(false);
                         onResult?.(newOnes);
-      
-                        // 每次有新增结果就更新缓存
-                        const toCache: CachedResult = {
+    
+                        // 每次新增就更新缓存
+                        parsed = {
                           timestamp: Date.now(),
+                          reSearch: true,
                           results: aggregatedResults,
                         };
-                        localStorage.setItem(cacheKey, JSON.stringify(toCache));
+                        localStorage.setItem(cacheKey, JSON.stringify(parsed));
                       }
                     }
                   }
@@ -782,22 +791,29 @@ function PlayPageClient() {
               }
             }
           }
-        }else{
+        } else {
           setSourceSearchLoading(false);
           return aggregatedResults;
         }
     
         setSourceSearchLoading(false);
-        localStorage.setItem('reSearch', 'false');
-
-        // 3. 最终返回所有结果
+    
+        // 最终缓存结果
+        parsed = {
+          timestamp: Date.now(),
+          reSearch: false,
+          results: aggregatedResults,
+        };
+        localStorage.setItem(cacheKey, JSON.stringify(parsed));
+    
         return aggregatedResults;
       } catch (err) {
         setSourceSearchError(err instanceof Error ? err.message : '搜索失败');
         setAvailableSources([]);
         return [];
       }
-    };    
+    };
+    
     
 
     const initAll = async () => {

@@ -128,15 +128,23 @@ function SearchPageClient() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let done = false;
+      let buffer = ''; // 用于存放可能被截断的 JSON 字符串
 
       while (!done) {
         const { value, done: readerDone } = await reader.read();
         done = readerDone;
 
         if (value) {
-          const text = decoder.decode(value, { stream: true });
-          text.split('\n').forEach((line) => {
-            if (!line) return;
+          buffer += decoder.decode(value, { stream: true });
+
+          // 假设每个 JSON 用换行符分隔
+          const lines = buffer.split('\n');
+
+          // 最后一段可能是半截，留到下次
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
             try {
               const json = JSON.parse(line);
               if (json.pageResults) {
@@ -144,9 +152,21 @@ function SearchPageClient() {
                 setIsLoading(false);
               }
             } catch (err) {
-              console.warn('解析流式结果失败', err);
+              console.warn('解析流式结果失败', err, line);
             }
-          });
+          }
+        }
+      }
+
+      // 处理最后一段（如果刚好是完整 JSON）
+      if (buffer.trim()) {
+        try {
+          const json = JSON.parse(buffer);
+          if (json.pageResults) {
+            setSearchResults((prev) => [...prev, ...json.pageResults]);
+          }
+        } catch (err) {
+          console.warn('最后一段解析失败', err, buffer);
         }
       }
 
@@ -158,6 +178,7 @@ function SearchPageClient() {
       setIsLoading(false);
     }
   };
+
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
