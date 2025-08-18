@@ -111,6 +111,9 @@ function PlayPageClient() {
   const [searchTitle] = useState(searchParams.get('stitle') || '');
   const [searchType] = useState(searchParams.get('stype') || '');
 
+  // 缓存是否过期
+  let CacheExpired = false;
+
   // 是否需要优选
   const [needPrefer, setNeedPrefer] = useState(
     searchParams.get('prefer') === 'true'
@@ -710,6 +713,7 @@ function PlayPageClient() {
             setSourceSearchLoading(false);
             onResult?.(parsed.results); // 先回调缓存
           } else {
+            CacheExpired = true;
             parsed.reSearch = true; // 用对象标记
           }
         }
@@ -923,14 +927,17 @@ function PlayPageClient() {
       if (!currentSource || !currentId) return;
 
       try {
-        // 从缓存中读取当前源和 ID
-        const cachedSource = localStorage.getItem('currentSource');
-        const cachedId = localStorage.getItem('currentId');
+        if(!CacheExpired){
+          // 从缓存中读取当前源和 ID
+          const cachedSource = localStorage.getItem('currentSource');
+          const cachedId = localStorage.getItem('currentId');
 
-        if (cachedSource && cachedId) {
-          setCurrentSource(cachedSource);
-          setCurrentId(cachedId);
+          if (cachedSource && cachedId) {
+            setCurrentSource(cachedSource);
+            setCurrentId(cachedId);
+          }
         }
+
         const config = await getSkipConfig(currentSource, currentId);
         if (config) {
           setSkipConfig(config);

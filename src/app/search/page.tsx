@@ -3,7 +3,7 @@
 
 import { ChevronUp, Search, X } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef,useState } from 'react';
 
 import {
   addSearchHistory,
@@ -116,19 +116,30 @@ function SearchPageClient() {
     }
   }, [searchParams]);
 
-  // 流式搜索函数
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   const fetchSearchResults = async (query: string) => {
+    // 取消上一次搜索
+    abortControllerRef.current?.abort();
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
       setIsLoading(true);
-      setSearchResults([]); // 清空旧结果
+      setSearchResults([]);
+      setShowResults(true);
 
-      const response = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}`);
+      const response = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}`, {
+        signal: controller.signal,
+      });
       if (!response.body) return;
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let done = false;
-      let buffer = ''; // 用于存放可能被截断的 JSON 字符串
+      let buffer = '';
+      let firstResult = true;
 
       while (!done) {
         const { value, done: readerDone } = await reader.read();
@@ -137,19 +148,19 @@ function SearchPageClient() {
         if (value) {
           buffer += decoder.decode(value, { stream: true });
 
-          // 假设每个 JSON 用换行符分隔
           const lines = buffer.split('\n');
-
-          // 最后一段可能是半截，留到下次
           buffer = lines.pop() || '';
 
           for (const line of lines) {
             if (!line.trim()) continue;
             try {
               const json = JSON.parse(line);
-              if (json.pageResults) {
+              if (json.pageResults && json.pageResults.length > 0) {
                 setSearchResults((prev) => [...prev, ...json.pageResults]);
-                setIsLoading(false);
+                if (firstResult) {
+                  setIsLoading(false);
+                  firstResult = false;
+                }
               }
             } catch (err) {
               console.warn('解析流式结果失败', err, line);
@@ -158,7 +169,7 @@ function SearchPageClient() {
         }
       }
 
-      // 处理最后一段（如果刚好是完整 JSON）
+      // 处理最后一段
       if (buffer.trim()) {
         try {
           const json = JSON.parse(buffer);
@@ -170,14 +181,15 @@ function SearchPageClient() {
         }
       }
 
-      setShowResults(true);
-    } catch (error) {
+      setIsLoading(false);
+
+    } catch (error: any) {
+      if (error.name === 'AbortError') return; // 被取消的请求不用报错
       console.error('搜索失败', error);
       setSearchResults([]);
-    } finally {
-      setIsLoading(false);
     }
   };
+
 
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
