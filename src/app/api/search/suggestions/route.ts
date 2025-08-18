@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getCacheTime, getConfig } from '@/lib/config';
-import { searchFromApiStream } from '@/lib/downstream'; // ✅ 改用流式方法
+import { searchFromApiStream } from '@/lib/downstream'; // 改用流式方法
 
 export const runtime = 'edge';
 

@@ -675,6 +675,15 @@ function PlayPageClient() {
         setSourceSearchLoading(false);
       }
     };
+
+    const CACHE_KEY_PREFIX = 'search_cache_';
+    const CACHE_TTL = 1000 * 60 * 180; // 缓存 180 分钟
+    
+    interface CachedResult {
+      timestamp: number;
+      results: SearchResult[];
+    }
+    
     const fetchSourcesData = async (
       query: string,
       onResult?: (results: SearchResult[]) => void
@@ -682,15 +691,30 @@ function PlayPageClient() {
       setSourceSearchLoading(true);
       setSourceSearchError('');
     
+      const cacheKey = `${CACHE_KEY_PREFIX}${query.trim().toLowerCase()}`;
+      let aggregatedResults: SearchResult[] = [];
+    
       try {
+        // 1. 读取缓存
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          const parsed: CachedResult = JSON.parse(cached);
+          if (Date.now() - parsed.timestamp < CACHE_TTL) {
+            aggregatedResults = [...parsed.results];
+            setAvailableSources(aggregatedResults);
+            setSourceSearchLoading(false);
+            onResult?.(parsed.results); // 先回调缓存
+          }
+        }
+    
+        // 2. 发起流式搜索请求
         const response = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}`);
         if (!response.ok) throw new Error('搜索失败');
     
-        const reader = response.body?.getReader();
+        const reader: ReadableStreamDefaultReader<Uint8Array> | undefined = response.body?.getReader();
         if (!reader) throw new Error('无法读取搜索流');
     
         const decoder = new TextDecoder();
-        const aggregatedResults: SearchResult[] = [];
         let buffer = '';
         let done = false;
     
@@ -700,34 +724,51 @@ function PlayPageClient() {
     
           if (value) {
             buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
+            const lines: string[] = buffer.split('\n');
             buffer = lines.pop() || '';
     
             for (const line of lines) {
               if (!line.trim()) continue;
     
               try {
-                const data = JSON.parse(line);
+                const data = JSON.parse(line) as { pageResults?: SearchResult[] };
                 if (data.pageResults) {
-                  const filteredResults = data.pageResults.filter((result: SearchResult) => {
-                    const titleMatch =
-                      result.title.replaceAll(' ', '').toLowerCase() ===
-                      videoTitleRef.current.replaceAll(' ', '').toLowerCase();
-                    const yearMatch = videoYearRef.current
-                      ? result.year.toLowerCase() === videoYearRef.current.toLowerCase()
-                      : true;
-                    const typeMatch = searchType
-                      ? (searchType === 'tv' && result.episodes.length > 1) ||
-                        (searchType === 'movie' && result.episodes.length === 1)
-                      : true;
-                    return titleMatch && yearMatch && typeMatch;
-                  });
+                  const filteredResults: SearchResult[] = (data.pageResults as SearchResult[]).filter(
+                    (r: SearchResult) => {
+                      const titleMatch =
+                        r.title.replaceAll(' ', '').toLowerCase() ===
+                        videoTitleRef.current.replaceAll(' ', '').toLowerCase();
+                      const yearMatch = videoYearRef.current
+                        ? r.year.toLowerCase() === videoYearRef.current.toLowerCase()
+                        : true;
+                      const typeMatch = searchType
+                        ? (searchType === 'tv' && r.episodes.length > 1) ||
+                          (searchType === 'movie' && r.episodes.length === 1)
+                        : true;
+                      return titleMatch && yearMatch && typeMatch;
+                    }
+                  );
     
                   if (filteredResults.length > 0) {
-                    aggregatedResults.push(...filteredResults);
-                    setAvailableSources([...aggregatedResults]);
-                    setSourceSearchLoading(false);
-                    onResult?.(filteredResults); // 一有匹配就回调
+                    // 只加入缓存里没有的结果
+                    const newOnes: SearchResult[] = filteredResults.filter(
+                      (r: SearchResult) =>
+                        !aggregatedResults.some(item => item.source === r.source && item.id === r.id)
+                    );
+    
+                    if (newOnes.length > 0) {
+                      aggregatedResults.push(...newOnes);
+                      setAvailableSources([...aggregatedResults]);
+                      setSourceSearchLoading(false);
+                      onResult?.(newOnes);
+    
+                      // 每次有新增结果就更新缓存
+                      const toCache: CachedResult = {
+                        timestamp: Date.now(),
+                        results: aggregatedResults,
+                      };
+                      localStorage.setItem(cacheKey, JSON.stringify(toCache));
+                    }
                   }
                 }
               } catch (err) {
@@ -736,17 +777,15 @@ function PlayPageClient() {
             }
           }
         }
-        // 搜索完成，不管是否有结果，都停止加载
-        setSourceSearchLoading(false);
     
+        setSourceSearchLoading(false);
         return aggregatedResults;
       } catch (err) {
         setSourceSearchError(err instanceof Error ? err.message : '搜索失败');
         setAvailableSources([]);
         return [];
       }
-    };
-    
+    };    
     
 
     const initAll = async () => {
@@ -774,7 +813,7 @@ function PlayPageClient() {
             setError('未找到匹配结果');
             setLoading(false);
           }
-        }, 10000); // 10秒
+        }, 15000); // 15秒
       };
     
       startTimeout();
