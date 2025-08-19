@@ -334,39 +334,48 @@ export default function VideoCard({
           </div>
         )}
 
-        {/* 播放源徽章 */}
-        {isAggregate && items && items.length > 0 && (
-          <div className='absolute bottom-2 right-2 flex flex-col items-end'>
-            <div className='relative'>
-              <button
-                type='button'
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowSources((prev) => !prev);
-                }}
-                className='w-7 h-7 bg-blue-500 text-white text-xs font-bold rounded-full flex items-center justify-center shadow-md hover:bg-blue-600 transition-colors'
-              >
-                {items.length}
-              </button>
+{/* 播放源徽章 */}
+{isAggregate && items && items.length > 0 && (
+  <div className="absolute bottom-2 right-2 flex flex-col items-end">
+    <div className="relative group/sources">
+      {/* 小圆圈按钮：默认显示 */}
+      <div
+        className="bg-gray-700 text-white text-xs sm:text-xs w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center shadow-md hover:bg-gray-600 hover:scale-[1.1] transition-all duration-300 ease-out cursor-pointer"
+        onClick={(e) => {
+          e.stopPropagation();
+          setShowSources((prev) => !prev); // 点击切换列表显示
+        }}
+      >
+        {items.length}
+      </div>
 
-              {showSources && (
-                <div className='absolute bottom-full right-0 mb-1 max-h-32 w-32 overflow-auto bg-gray-800 text-white text-xs rounded-md shadow-lg p-1 z-50'>
-                  {items.map((item, idx) => (
-                    <div
-                      key={idx}
-                      className='px-2 py-0.5 hover:bg-gray-700 rounded cursor-pointer'
-                      onClick={(e) => {
-                        e.stopPropagation();
-                      }}
-                    >
-                      {item.source_name}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+{/* 播放源列表弹窗 */}
+{showSources && (
+  <div className="absolute bottom-full mb-2 right-0 sm:right-0 z-50">
+    <div className="bg-gray-800/90 backdrop-blur-sm text-white text-xs sm:text-xs rounded-lg shadow-xl border border-white/10 p-1 sm:p-1.5 min-w-[70px] sm:min-w-[90px] max-w-[120px] sm:max-w-[160px] max-h-20 sm:max-h-40 overflow-auto">
+      <div className="space-y-0.5 sm:space-y-1">
+        {items.map((item, idx) => (
+          <div key={idx} className="flex items-center gap-1 sm:gap-1.5">
+            <div className="w-0.5 h-0.5 sm:w-1 sm:h-1 bg-blue-400 rounded-full flex-shrink-0"></div>
+            <span className="truncate text-[10px] sm:text-xs leading-tight" title={item.source_name}>
+              {item.source_name}
+            </span>
           </div>
-        )}
+        ))}
+      </div>
+
+      {/* 小箭头 */}
+      <div className="absolute top-full right-2 sm:right-3 w-0 h-0 border-l-[4px] border-r-[4px] border-t-[4px] sm:border-l-[6px] sm:border-r-[6px] sm:border-t-[6px] border-transparent border-t-gray-800/90"></div>
+    </div>
+  </div>
+)}
+{/* 播放源列表弹窗 */}
+
+    </div>
+  </div>
+)}
+
+
       </div>
 
       {config.showProgress && progress !== undefined && (
