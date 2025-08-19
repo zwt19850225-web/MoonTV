@@ -707,7 +707,9 @@ function PlayPageClient() {
     
         if (cached) {
           parsed = JSON.parse(cached) as CachedResult;
-          if (Date.now() - parsed.timestamp < CACHE_TTL) {
+          // 判断 timestamp 是否过期，同时检查 results 中的 id 是否一致
+          const idsMatch = parsed.results.every((item, index) => item.title === videoTitle);
+          if (Date.now() - parsed.timestamp < CACHE_TTL && idsMatch) {
             aggregatedResults = [...parsed.results];
             setAvailableSources(aggregatedResults);
             setSourceSearchLoading(false);
