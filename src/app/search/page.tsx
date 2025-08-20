@@ -45,6 +45,21 @@ function SearchPageClient() {
     getDefaultAggregate() ? 'agg' : 'all'
   );
 
+  // 流式搜索开关（本地持久化）
+  const getDefaultStream = () => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('enableStreamSearch');
+      if (saved !== null) return saved === 'true';
+    }
+    return true;
+  };
+  const [streamEnabled, setStreamEnabled] = useState<boolean>(() => getDefaultStream());
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('enableStreamSearch', String(streamEnabled));
+    }
+  }, [streamEnabled]);
+
   // 聚合后的结果
   const aggregatedResults = useMemo(() => {
     const map = new Map<string, SearchResult[]>();
@@ -130,54 +145,68 @@ function SearchPageClient() {
       setSearchResults([]);
       setShowResults(true);
 
-      const response = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}`, {
+      const enableStream = streamEnabled;
+
+      const params = new URLSearchParams({ q: query.trim() });
+      if (!enableStream) params.set('stream', '0');
+
+      const response = await fetch(`/api/search?${params.toString()}`, {
         signal: controller.signal,
       });
-      if (!response.body) return;
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let done = false;
-      let buffer = '';
-      let firstResult = true;
+      if (!enableStream) {
+        // 非流式：一次性获取并基于是否为空由服务端设置缓存头
+        const json = await response.json();
+        const finalResults = (json.aggregatedResults || []) as SearchResult[];
+        setSearchResults(finalResults);
+        setIsLoading(false);
+      } else {
+        // 流式：逐行解析
+        if (!response.body) return;
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let done = false;
+        let buffer = '';
+        let firstResult = true;
 
-      while (!done) {
-        const { value, done: readerDone } = await reader.read();
-        done = readerDone;
+        while (!done) {
+          const { value, done: readerDone } = await reader.read();
+          done = readerDone;
 
-        if (value) {
-          buffer += decoder.decode(value, { stream: true });
+          if (value) {
+            buffer += decoder.decode(value, { stream: true });
 
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
 
-          for (const line of lines) {
-            if (!line.trim()) continue;
-            try {
-              const json = JSON.parse(line);
-              if (json.pageResults && json.pageResults.length > 0) {
-                setSearchResults((prev) => [...prev, ...json.pageResults]);
-                if (firstResult) {
-                  setIsLoading(false);
-                  firstResult = false;
+            for (const line of lines) {
+              if (!line.trim()) continue;
+              try {
+                const json = JSON.parse(line);
+                if (json.pageResults && json.pageResults.length > 0) {
+                  setSearchResults((prev) => [...prev, ...json.pageResults]);
+                  if (firstResult) {
+                    setIsLoading(false);
+                    firstResult = false;
+                  }
                 }
+              } catch (err) {
+                console.warn('解析流式结果失败', err, line);
               }
-            } catch (err) {
-              console.warn('解析流式结果失败', err, line);
             }
           }
         }
-      }
 
-      // 处理最后一段
-      if (buffer.trim()) {
-        try {
-          const json = JSON.parse(buffer);
-          if (json.pageResults) {
-            setSearchResults((prev) => [...prev, ...json.pageResults]);
+        // 处理最后一段
+        if (buffer.trim()) {
+          try {
+            const json = JSON.parse(buffer);
+            if (json.pageResults) {
+              setSearchResults((prev) => [...prev, ...json.pageResults]);
+            }
+          } catch (err) {
+            console.warn('最后一段解析失败', err, buffer);
           }
-        } catch (err) {
-          console.warn('最后一段解析失败', err, buffer);
         }
       }
 
@@ -272,19 +301,35 @@ function SearchPageClient() {
                 <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
                   搜索结果
                 </h2>
-                <label className='flex items-center gap-2 cursor-pointer select-none'>
-                  <span className='text-sm text-gray-700 dark:text-gray-300'>聚合</span>
-                  <div className='relative'>
-                    <input
-                      type='checkbox'
-                      className='sr-only peer'
-                      checked={viewMode === 'agg'}
-                      onChange={() => setViewMode(viewMode === 'agg' ? 'all' : 'agg')}
-                    />
-                    <div className='w-9 h-5 bg-gray-300 rounded-full peer-checked:bg-green-500 transition-colors dark:bg-gray-600'></div>
-                    <div className='absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-4'></div>
-                  </div>
-                </label>
+                <div className='flex items-center gap-4'>
+                  <label className='flex items-center gap-2 cursor-pointer select-none'>
+                    <span className='text-sm text-gray-700 dark:text-gray-300'>流式</span>
+                    <div className='relative'>
+                      <input
+                        type='checkbox'
+                        className='sr-only peer'
+                        checked={streamEnabled}
+                        onChange={() => setStreamEnabled(!streamEnabled)}
+                      />
+                      <div className='w-9 h-5 bg-gray-300 rounded-full peer-checked:bg-green-500 transition-colors dark:bg-gray-600'></div>
+                      <div className='absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-4'></div>
+                    </div>
+                  </label>
+
+                  <label className='flex items-center gap-2 cursor-pointer select-none'>
+                    <span className='text-sm text-gray-700 dark:text-gray-300'>聚合</span>
+                    <div className='relative'>
+                      <input
+                        type='checkbox'
+                        className='sr-only peer'
+                        checked={viewMode === 'agg'}
+                        onChange={() => setViewMode(viewMode === 'agg' ? 'all' : 'agg')}
+                      />
+                      <div className='w-9 h-5 bg-gray-300 rounded-full peer-checked:bg-green-500 transition-colors dark:bg-gray-600'></div>
+                      <div className='absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-4'></div>
+                    </div>
+                  </label>
+                </div>
               </div>
 
               <div

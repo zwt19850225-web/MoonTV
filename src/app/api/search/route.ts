@@ -8,30 +8,30 @@ export const runtime = 'edge';
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const query = searchParams.get('q');
+  const streamParam = searchParams.get('stream');
+  const enableStream = streamParam !== '0'; // 默认开启流式
 
   if (!query) {
-    const cacheTime = await getCacheTime();
+    // 空查询，明确不缓存
     return new Response(JSON.stringify({ results: [] }), {
-      headers: { 'Content-Type': 'application/json', 'Cache-Control': `private, max-age=${cacheTime}` },
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        Pragma: 'no-cache',
+        Expires: '0',
+      },
     });
   }
 
   const config = await getConfig();
   const apiSites = config.SourceConfig.filter((site) => !site.disabled);
 
-  const encoder = new TextEncoder();
-
-  // 使用 TransformStream 确保 Edge 可以实时 flush
-  const { readable, writable } = new TransformStream();
-  const writer = writable.getWriter();
-
-  (async () => {
+  if (!enableStream) {
+    // 非流式：聚合完成后根据是否为空设置缓存策略
     const aggregatedResults: any[] = [];
-
     for (const site of apiSites) {
       try {
         const generator = searchFromApiStream(site, query);
-
         for await (const pageResults of generator) {
           let filteredResults = pageResults;
           if (!config.SiteConfig.DisableYellowFilter) {
@@ -40,18 +40,58 @@ export async function GET(request: Request) {
               return !yellowWords.some((word) => typeName.includes(word));
             });
           }
-
           aggregatedResults.push(...filteredResults);
-
-          // 流式写入每页结果
-          await writer.write(encoder.encode(JSON.stringify({ pageResults: filteredResults }) + '\n'));
         }
       } catch (err: any) {
         console.warn(`搜索失败 ${site.name}:`, err.message);
       }
     }
 
-    // 最终发送聚合结果
+    if (aggregatedResults.length === 0) {
+      return new Response(JSON.stringify({ aggregatedResults }), {
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+          Pragma: 'no-cache',
+          Expires: '0',
+        },
+      });
+    } else {
+      const cacheTime = await getCacheTime();
+      return new Response(JSON.stringify({ aggregatedResults }), {
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Cache-Control': `private, max-age=${cacheTime}`,
+        },
+      });
+    }
+  }
+
+  // 流式：保持原有流式行为（无法在响应开始后再按“是否为空”调整缓存头）
+  const encoder = new TextEncoder();
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+
+  (async () => {
+    const aggregatedResults: any[] = [];
+    for (const site of apiSites) {
+      try {
+        const generator = searchFromApiStream(site, query);
+        for await (const pageResults of generator) {
+          let filteredResults = pageResults;
+          if (!config.SiteConfig.DisableYellowFilter) {
+            filteredResults = pageResults.filter((result) => {
+              const typeName = result.type_name || '';
+              return !yellowWords.some((word) => typeName.includes(word));
+            });
+          }
+          aggregatedResults.push(...filteredResults);
+          await writer.write(encoder.encode(JSON.stringify({ pageResults: filteredResults }) + '\n'));
+        }
+      } catch (err: any) {
+        console.warn(`搜索失败 ${site.name}:`, err.message);
+      }
+    }
     await writer.write(encoder.encode(JSON.stringify({ aggregatedResults }) + '\n'));
     writer.close();
   })();
