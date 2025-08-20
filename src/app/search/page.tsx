@@ -45,20 +45,16 @@ function SearchPageClient() {
     getDefaultAggregate() ? 'agg' : 'all'
   );
 
-  // 流式搜索开关（本地持久化）
+  // 流式搜索开关（仅读取设置中的默认值）
   const getDefaultStream = () => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('enableStreamSearch');
-      if (saved !== null) return saved === 'true';
+      const defaultSaved = localStorage.getItem('defaultStreamSearch');
+      if (defaultSaved !== null) return defaultSaved === 'true';
     }
     return true;
   };
   const [streamEnabled, setStreamEnabled] = useState<boolean>(() => getDefaultStream());
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('enableStreamSearch', String(streamEnabled));
-    }
-  }, [streamEnabled]);
+  // 不再将页面内切换写入任何本地键，始终以 defaultStreamSearch 作为默认来源
 
   // 聚合后的结果
   const aggregatedResults = useMemo(() => {
