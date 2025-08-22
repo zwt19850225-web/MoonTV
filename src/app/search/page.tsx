@@ -249,6 +249,10 @@ function SearchPageClient() {
 
     fetchSearchResults(trimmed);
     addSearchHistory(trimmed);
+
+    const newUrl = `/search?q=${encodeURIComponent(trimmed)}`;
+    window.history.pushState({}, '', newUrl); // 改 URL 并入历史
+    
   };
 
   const handleSuggestionSelect = (suggestion: string) => {
@@ -259,6 +263,9 @@ function SearchPageClient() {
 
     fetchSearchResults(suggestion);
     addSearchHistory(suggestion);
+    const newUrl = `/search?q=${encodeURIComponent(suggestion)}`;
+    window.history.pushState({}, '', newUrl); // 改 URL 并入历史
+    
   };
 
   const scrollToTop = () => {
