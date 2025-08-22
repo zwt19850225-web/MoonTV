@@ -11,6 +11,21 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: "2.2.8",
+    date: "2025-08-22",
+    added: [
+      // 无新增内容
+    ],
+    changed: [
+    "转移视频源优选按钮至播放页面"
+    ],
+    fixed: [
+    "优化播放换源",
+    "优化失败源显示逻辑",
+    "修复搜索路由问题"
+    ]
+  },
+  {
     version: "2.2.1",
     date: "2025-08-22",
     added: [
