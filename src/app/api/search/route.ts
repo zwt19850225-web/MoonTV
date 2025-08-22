@@ -135,11 +135,15 @@ export async function GET(request: Request) {
         // 如果没有结果，也记录为失败
         if (!hasResults) {
           failedSources.push({ name: site.name, key: site.key, error: '无搜索结果' });
+          // 发送失败的数据源信息
+          await safeWrite({ failedSources });
         }
       } catch (err: any) {
         console.warn(`搜索失败 ${site.name}:`, err.message);
         failedSources.push({ name: site.name, key: site.key, error: err.message || '未知错误' });
+        await safeWrite({ failedSources });
       }
+
       if (shouldStop) break;
     }
     
