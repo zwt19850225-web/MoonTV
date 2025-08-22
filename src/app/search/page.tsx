@@ -14,6 +14,7 @@ import {
 } from '@/lib/db.client';
 import { SearchResult } from '@/lib/types';
 
+import FailedSourcesDisplay from '@/components/FailedSourcesDisplay';
 import PageLayout from '@/components/PageLayout';
 import SearchSuggestions from '@/components/SearchSuggestions';
 import VideoCard from '@/components/VideoCard';
@@ -31,6 +32,7 @@ function SearchPageClient() {
   const [showResults, setShowResults] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [failedSources, setFailedSources] = useState<{ name: string; key: string; error: string }[]>([]);
 
   // 获取默认聚合设置
   const getDefaultAggregate = () => {
@@ -77,7 +79,7 @@ function SearchPageClient() {
       const bYear = b[1][0].year;
       if (aYear === bYear) return a[0].localeCompare(b[0]);
       if (aYear === 'unknown') return 1;
-      if (bYear === 'unknown') return -1;
+      if (bYear === 'unknown') return 1;
       return aYear > bYear ? -1 : 1;
     });
   }, [searchResults]);
@@ -139,6 +141,7 @@ function SearchPageClient() {
     try {
       setIsLoading(true);
       setSearchResults([]);
+      setFailedSources([]);
       setShowResults(true);
 
       const enableStream = streamEnabled;
@@ -154,7 +157,9 @@ function SearchPageClient() {
         // 非流式：一次性获取并基于是否为空由服务端设置缓存头
         const json = await response.json();
         const finalResults = (json.aggregatedResults || []) as SearchResult[];
+        const finalFailedSources = (json.failedSources || []) as { name: string; key: string; error: string }[];
         setSearchResults(finalResults);
+        setFailedSources(finalFailedSources);
         setIsLoading(false);
       } else {
         // 流式：逐行解析
@@ -186,6 +191,9 @@ function SearchPageClient() {
                     firstResult = false;
                   }
                 }
+                if (json.failedSources) {
+                  setFailedSources(json.failedSources);
+                }
               } catch (err) {
                 console.warn('解析流式结果失败', err, line);
               }
@@ -199,6 +207,9 @@ function SearchPageClient() {
             const json = JSON.parse(buffer);
             if (json.pageResults) {
               setSearchResults((prev) => [...prev, ...json.pageResults]);
+            }
+            if (json.failedSources) {
+              setFailedSources(json.failedSources);
             }
           } catch (err) {
             console.warn('最后一段解析失败', err, buffer);
@@ -292,9 +303,15 @@ function SearchPageClient() {
           ) : showResults ? (
             <section className='mb-12'>
               <div className='mb-8 flex items-center justify-between'>
-                <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
-                  搜索结果
-                </h2>
+                <div className='flex items-center gap-4'>
+                  <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
+                    搜索结果
+                  </h2>
+                  {/* 显示失败的数据源 */}
+                  <FailedSourcesDisplay 
+                    failedSources={failedSources}
+                  />
+                </div>
                 <div className='flex items-center gap-4'>
                   <label className='flex items-center gap-2 cursor-pointer select-none'>
                     <span className='text-sm text-gray-700 dark:text-gray-300'>流式</span>

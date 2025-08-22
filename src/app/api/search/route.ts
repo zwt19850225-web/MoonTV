@@ -29,10 +29,14 @@ export async function GET(request: Request) {
   if (!enableStream) {
     // 非流式：聚合完成后根据是否为空设置缓存策略
     const aggregatedResults: any[] = [];
+    const failedSources: { name: string; key: string; error: string }[] = [];
+    
     for (const site of apiSites) {
       try {
         const generator = searchFromApiStream(site, query);
+        let hasResults = false;
         for await (const pageResults of generator) {
+          hasResults = true;
           let filteredResults = pageResults;
           if (!config.SiteConfig.DisableYellowFilter) {
             filteredResults = pageResults.filter((result) => {
@@ -42,13 +46,21 @@ export async function GET(request: Request) {
           }
           aggregatedResults.push(...filteredResults);
         }
+        // 如果没有结果，也记录为失败
+        if (!hasResults) {
+          failedSources.push({ name: site.name, key: site.key, error: '无搜索结果' });
+        }
       } catch (err: any) {
         console.warn(`搜索失败 ${site.name}:`, err.message);
+        failedSources.push({ name: site.name, key: site.key, error: err.message || '未知错误' });
       }
     }
 
     if (aggregatedResults.length === 0) {
-      return new Response(JSON.stringify({ aggregatedResults }), {
+      return new Response(JSON.stringify({ 
+        aggregatedResults,
+        failedSources 
+      }), {
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
           'Cache-Control': 'no-store, no-cache, must-revalidate',
@@ -58,7 +70,10 @@ export async function GET(request: Request) {
       });
     } else {
       const cacheTime = await getCacheTime();
-      return new Response(JSON.stringify({ aggregatedResults }), {
+      return new Response(JSON.stringify({ 
+        aggregatedResults,
+        failedSources 
+      }), {
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
           'Cache-Control': `private, max-age=${cacheTime}`,
@@ -67,7 +82,7 @@ export async function GET(request: Request) {
     }
   }
 
-  // 流式：保持原有流式行为（无法在响应开始后再按“是否为空”调整缓存头）
+  // 流式：保持原有流式行为（无法在响应开始后再按"是否为空"调整缓存头）
   const encoder = new TextEncoder();
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
@@ -97,10 +112,14 @@ export async function GET(request: Request) {
 
   (async () => {
     const aggregatedResults: any[] = [];
+    const failedSources: { name: string; key: string; error: string }[] = [];
+    
     for (const site of apiSites) {
       try {
         const generator = searchFromApiStream(site, query);
+        let hasResults = false;
         for await (const pageResults of generator) {
+          hasResults = true;
           let filteredResults = pageResults;
           if (!config.SiteConfig.DisableYellowFilter) {
             filteredResults = pageResults.filter((result) => {
@@ -113,11 +132,22 @@ export async function GET(request: Request) {
             break;
           }
         }
+        // 如果没有结果，也记录为失败
+        if (!hasResults) {
+          failedSources.push({ name: site.name, key: site.key, error: '无搜索结果' });
+        }
       } catch (err: any) {
         console.warn(`搜索失败 ${site.name}:`, err.message);
+        failedSources.push({ name: site.name, key: site.key, error: err.message || '未知错误' });
       }
       if (shouldStop) break;
     }
+    
+    // 发送失败的数据源信息
+    if (failedSources.length > 0) {
+      await safeWrite({ failedSources });
+    }
+    
     await safeWrite({ aggregatedResults });
     try {
       await writer.close();
