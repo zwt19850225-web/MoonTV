@@ -815,11 +815,11 @@ export const UserMenu: React.FC = () => {
             </label>
           </div>
 
-          {/* 默认搜索模式（流式） */}
+          {/* 默认流式搜索模式 */}
           <div className='flex items-center justify-between'>
             <div>
               <h4 className='text-sm font-medium text-gray-700 dark:text-gray-300'>
-                默认搜索模式（流式）
+                默认流式搜索模式
               </h4>
               <p className='text-xs text-gray-500 dark:text-gray-400 mt-1'>
                 关闭后默认使用一次性返回，空结果将不缓存
