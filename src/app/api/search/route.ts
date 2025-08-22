@@ -119,13 +119,20 @@ export async function GET(request: Request) {
         const generator = searchFromApiStream(site, query);
         let hasResults = false;
         for await (const pageResults of generator) {
-          hasResults = true;
           let filteredResults = pageResults;
+          if(filteredResults.length != 0){
+            hasResults = true;
+          }
           if (!config.SiteConfig.DisableYellowFilter) {
             filteredResults = pageResults.filter((result) => {
               const typeName = result.type_name || '';
               return !yellowWords.some((word) => typeName.includes(word));
             });
+          }
+          if(hasResults === true && filteredResults.length === 0){
+            failedSources.push({ name: site.name, key: site.key, error: '被过滤了' });
+            await safeWrite({ failedSources });
+            break;
           }
           aggregatedResults.push(...filteredResults);
           if (!(await safeWrite({ pageResults: filteredResults }))) {
