@@ -11,6 +11,19 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: "2.2.1",
+    date: "2025-08-22",
+    added: [
+    "搜索结果展示失败源"
+    ],
+    changed: [
+    "移除无效代理Cors Anywhere"
+    ],
+    fixed: [
+    "修复一次搜索两个请求的问题"
+    ]
+  },
+  {
     version: "2.1.0",
     date: "2025-08-21",
     added: [
