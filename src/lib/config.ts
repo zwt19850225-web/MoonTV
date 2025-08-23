@@ -154,6 +154,7 @@ export async function getConfig(): Promise<AdminConfig> {
         const parsedFile = JSON.parse(adminConfig.ConfigFile) as ConfigFileStruct;
 
         // 覆盖 SourceConfig
+        // SourceConfig
         if (parsedFile.api_site) {
           adminConfig.SourceConfig = Object.entries(parsedFile.api_site).map(
             ([key, site]) => ({
@@ -165,20 +166,23 @@ export async function getConfig(): Promise<AdminConfig> {
               disabled: false,
             })
           );
+        } else {
+          adminConfig.SourceConfig = [];
         }
 
-        // 覆盖 CustomCategories
+        // CustomCategories
         if (parsedFile.custom_category) {
-          adminConfig.CustomCategories = parsedFile.custom_category.map(
-            (category) => ({
-              name: category.name,
-              type: category.type,
-              query: category.query,
-              from: 'config',
-              disabled: false,
-            })
-          );
+          adminConfig.CustomCategories = parsedFile.custom_category.map((category) => ({
+            name: category.name,
+            type: category.type,
+            query: category.query,
+            from: 'config',
+            disabled: false,
+          }));
+        } else {
+          adminConfig.CustomCategories = [];
         }
+
       } catch (err) {
         console.error('解析 ConfigFile 失败:', err);
       }
