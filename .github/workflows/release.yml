@@ -18,17 +18,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      # 先设置 Node.js 版本，保证后续 pnpm 用 Node v22
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v3
         with:
           version: 10.14.0
-          run_install: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -43,7 +42,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          # github.ref 格式是 refs/tags/v1.0.0，需要提取 tag 名
           tag_name: ${{ github.ref_name }}
           release_name: Release ${{ github.ref_name }}
           body: |

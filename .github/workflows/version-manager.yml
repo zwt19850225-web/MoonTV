@@ -18,19 +18,17 @@ jobs:
           token: ${{ secrets.PAT_TOKEN }} # 必须在仓库 secrets 中添加 PAT_TOKEN
           fetch-depth: 0
 
+      # 安装 Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       # 安装 pnpm
       - name: Setup pnpm
         uses: pnpm/action-setup@v3
         with:
           version: 10.14.0
-          run_install: false
-
-      # 安装 Node.js
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-          cache: 'pnpm'
 
       # 安装依赖
       - name: Install dependencies
