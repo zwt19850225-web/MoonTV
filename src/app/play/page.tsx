@@ -178,7 +178,7 @@ function PlayPageClient() {
   // 换源加载状态
   const [isVideoLoading, setIsVideoLoading] = useState(true);
   const [videoLoadingStage, setVideoLoadingStage] = useState<
-    'initing' | 'sourceChanging'
+    'initing' | 'sourceChanging' | 'optimizing'
   >('initing');
 
   // 播放进度保存相关
@@ -2055,6 +2055,8 @@ function PlayPageClient() {
                         <p className='text-xl font-semibold text-white animate-pulse'>
                           {videoLoadingStage === 'sourceChanging'
                             ? '🔄 切换播放源...'
+                            : videoLoadingStage === 'optimizing'
+                            ? '⚡ 优选播放源...'
                             : '🔄 视频加载中...'}
                         </p>
                       </div>
@@ -2087,8 +2089,8 @@ function PlayPageClient() {
                 precomputedVideoInfo={precomputedVideoInfo}
                 preferBestSource={preferBestSource}
                 setLoading={setLoading}
-                setLoadingStage={setLoadingStage}
-                setLoadingMessage={setLoadingMessage}
+                setIsVideoLoading={setIsVideoLoading}
+                setVideoLoadingStage={setVideoLoadingStage}
               />
             </div>
           </div>
