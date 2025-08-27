@@ -327,19 +327,30 @@ export default function VideoCard({
           </div>
         )}
 
-        {/* ⭐ 评分显示（左上角小圆圈，可跳转豆瓣） */}
+        {/* ⭐ 评分显示（左上角小圆圈，可跳转豆瓣或 Bangumi） */}
         {config.showRating && rate && actualDoubanId && (
           <div
             onClick={(e) => {
               e.stopPropagation(); // 阻止触发卡片点击
-              window.open(`https://movie.douban.com/subject/${actualDoubanId}`, '_blank');
+
+              const searchParams = new URLSearchParams(window.location.search);
+              const type = searchParams.get("type");
+
+              if (type === "anime") {
+                // 动漫 → Bangumi
+                window.open(`https://bangumi.tv/subject/${actualDoubanId}`, "_blank");
+              } else {
+                // 默认 → 豆瓣
+                window.open(`https://movie.douban.com/subject/${actualDoubanId}`, "_blank");
+              }
             }}
             className="absolute top-2 left-2 bg-pink-500 text-white text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-full shadow-md cursor-pointer hover:bg-pink-600 transition"
-            title="去豆瓣查看详情"
+            title="去详情页查看"
           >
             {rate}
           </div>
         )}
+
 
         {/* 📅 年份显示（左上角） */}
         {from === 'search' && actualYear && actualYear.toLowerCase() !== 'unknown' && (
