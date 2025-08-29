@@ -331,6 +331,11 @@ export const UserMenu: React.FC = () => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('simpleMode', JSON.stringify(value));
     }
+    // 简洁模式变化时关闭设置并刷新页面
+    setIsSettingsOpen(false);
+    setTimeout(() => {
+      window.location.reload();
+    }, 100);
   };
 
   const handleDoubanProxyUrlChange = (value: string) => {
@@ -591,7 +596,10 @@ export const UserMenu: React.FC = () => {
 
         {/* 设置项 */}
         <div className='space-y-6'>
-          {/* 豆瓣数据源选择 */}
+          {/* 简洁模式下隐藏所有代理相关设置 */}
+          {!simpleMode && (
+            <>
+              {/* 豆瓣数据源选择 */}
           <div className='space-y-3'>
             <div>
               <h4 className='text-sm font-medium text-gray-700 dark:text-gray-300'>
@@ -805,6 +813,8 @@ export const UserMenu: React.FC = () => {
 
           {/* 分割线 */}
           <div className='border-t border-gray-200 dark:border-gray-700'></div>
+            </>
+          )}
 
           {/* 默认聚合搜索结果 */}
           <div className='flex items-center justify-between'>
