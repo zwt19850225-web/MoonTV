@@ -36,10 +36,26 @@ function SearchPageClient() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [failedSources, setFailedSources] = useState<{ name: string; key: string; error: string }[]>([]);
 
-  // 筛选状态 - 从 URL 参数初始化
+  // 筛选状态 - 从 URL 参数初始化，如果没有URL参数则从保存的源读取
   const [searchSources, setSearchSources] = useState<string[]>(() => {
     const sources = searchParams.get('sources');
-    return sources ? sources.split(',') : [];
+    if (sources) {
+      return sources.split(',');
+    }
+    
+    // 如果没有URL参数，检查是否有保存的源
+    if (typeof window !== 'undefined') {
+      const savedSources = localStorage.getItem('savedSources');
+      if (savedSources) {
+        try {
+          return JSON.parse(savedSources);
+        } catch (error) {
+          console.error('Failed to parse saved sources:', error);
+        }
+      }
+    }
+    
+    return [];
   });
   const [selectedTitles, setSelectedTitles] = useState<string[]>(() => {
     const titles = searchParams.get('titles');
