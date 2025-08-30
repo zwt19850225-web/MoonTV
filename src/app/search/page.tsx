@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps, @typescript-eslint/no-explicit-any */
 'use client';
 
-import { ChevronUp, Search, X } from 'lucide-react';
+import { ChevronUp, RotateCcw,Search, X } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useMemo } from 'react';
 import { useEffect,useRef, useState } from 'react';
@@ -35,10 +35,19 @@ function SearchPageClient() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [failedSources, setFailedSources] = useState<{ name: string; key: string; error: string }[]>([]);
 
-  // 筛选状态
-  const [selectedSources, setSelectedSources] = useState<string[]>([]);
-  const [selectedTitles, setSelectedTitles] = useState<string[]>([]);
-  const [selectedYears, setSelectedYears] = useState<string[]>([]);
+  // 筛选状态 - 从 URL 参数初始化
+  const [selectedSources, setSelectedSources] = useState<string[]>(() => {
+    const sources = searchParams.get('sources');
+    return sources ? sources.split(',') : [];
+  });
+  const [selectedTitles, setSelectedTitles] = useState<string[]>(() => {
+    const titles = searchParams.get('titles');
+    return titles ? titles.split(',') : [];
+  });
+  const [selectedYears, setSelectedYears] = useState<string[]>(() => {
+    const years = searchParams.get('years');
+    return years ? years.split(',') : [];
+  });
   // 新增状态：记录当前展开的筛选框
   const [openFilter, setOpenFilter] = useState<string | null>(null);
 
@@ -88,12 +97,24 @@ function SearchPageClient() {
   // 用于筛选后的聚合结果，保证类型安全
   const filteredAggregatedResults: [string, SearchResult[]][] = useMemo(() => {
     return aggregatedResults
+      .filter(([key, group]) => {
+        // 来源筛选：如果选择了来源，只保留包含至少一个选中来源的影片组
+        const sourceMatch = selectedSources.length === 0 ||
+          group.some(item => selectedSources.includes(item.source_name));
+        // 标题筛选：如果选择了标题，只保留标题匹配的影片组
+        const titleMatch = selectedTitles.length === 0 ||
+          selectedTitles.includes(group[0].title);
+        // 年份筛选：如果选择了年份，只保留年份匹配的影片组
+        const yearMatch = selectedYears.length === 0 ||
+          selectedYears.includes(group[0].year);
+        return sourceMatch && titleMatch && yearMatch;
+      })
       .map(([key, group]) => {
+        // 在组内也进行筛选，确保组内每个项目都符合筛选条件
         const filteredGroup = group.filter((item) => {
-          const sourceMatch = selectedSources.length === 0 || selectedSources.includes(item.source_name);
           const titleMatch = selectedTitles.length === 0 || selectedTitles.includes(item.title);
           const yearMatch = selectedYears.length === 0 || selectedYears.includes(item.year);
-          return sourceMatch && titleMatch && yearMatch;
+          return titleMatch && yearMatch;
         });
         return [key, filteredGroup] as [string, SearchResult[]];
       })
@@ -210,6 +231,34 @@ function SearchPageClient() {
     }
   }, [searchParams]);
 
+  // 更新筛选状态到 URL
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams);
+    
+    if (selectedSources.length > 0) {
+      params.set('sources', selectedSources.join(','));
+    } else {
+      params.delete('sources');
+    }
+    
+    if (selectedTitles.length > 0) {
+      params.set('titles', selectedTitles.join(','));
+    } else {
+      params.delete('titles');
+    }
+    
+    if (selectedYears.length > 0) {
+      params.set('years', selectedYears.join(','));
+    } else {
+      params.delete('years');
+    }
+    
+    // 只在有搜索查询时才更新 URL
+    if (searchParams.get('q')) {
+      window.history.replaceState({}, '', `/search?${params.toString()}`);
+    }
+  }, [selectedSources, selectedTitles, selectedYears, searchParams]);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchQuery(value);
@@ -304,7 +353,24 @@ function SearchPageClient() {
             openFilter={openFilter}
             setOpenFilter={setOpenFilter}
           />
-
+          
+          {/* 全局清空筛选按钮 */}
+          {(selectedSources.length > 0 || selectedTitles.length > 0 || selectedYears.length > 0) && (
+            <div className="flex items-center bg-gray-200 dark:bg-gray-700 rounded-lg overflow-hidden mr-2 mb-2">
+              <button
+                onClick={() => {
+                  setSelectedSources([]);
+                  setSelectedTitles([]);
+                  setSelectedYears([]);
+                }}
+                className="flex items-center gap-1 px-3 py-2 text-sm font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                title="清空所有筛选条件"
+              >
+                <RotateCcw className="w-4 h-4" />
+                清空
+              </button>
+            </div>
+          )}
           </div>
         )}
 
@@ -369,7 +435,9 @@ function SearchPageClient() {
                   ))
                 : searchResults
                     .filter((item) => {
-                      const sourceMatch = selectedSources.length === 0 || selectedSources.includes(item.source_name);
+                      // 来源筛选：如果选择了来源，只保留包含至少一个选中来源的影片
+                      const sourceMatch = selectedSources.length === 0 ||
+                        selectedSources.includes(item.source_name);
                       const titleMatch = selectedTitles.length === 0 || selectedTitles.includes(item.title);
                       const yearMatch = selectedYears.length === 0 || selectedYears.includes(item.year);
                       return sourceMatch && titleMatch && yearMatch;
