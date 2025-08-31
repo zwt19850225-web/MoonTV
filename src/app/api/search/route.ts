@@ -10,6 +10,8 @@ export async function GET(request: Request) {
   const query = searchParams.get('q');
   const streamParam = searchParams.get('stream');
   const enableStream = streamParam !== '0'; // 默认开启流式
+  const timeoutParam = searchParams.get('timeout');
+  const timeout = timeoutParam ? parseInt(timeoutParam, 10) * 1000 : undefined; // 转换为毫秒
 
   const config = await getConfig();
   
@@ -70,7 +72,7 @@ export async function GET(request: Request) {
       const siteResults: any[] = [];
       let hasResults = false;
       try {
-        const generator = searchFromApiStream(site, query);
+        const generator = searchFromApiStream(site, query, true, timeout);
         for await (const pageResults of generator) {
           let filteredResults = pageResults;
           if (filteredResults.length !== 0) {
@@ -143,7 +145,7 @@ export async function GET(request: Request) {
 
     const tasks = apiSites.map(async (site) => {
       try {
-        const generator = searchFromApiStream(site, query);
+        const generator = searchFromApiStream(site, query, true, timeout);
         let hasResults = false;
 
         for await (const pageResults of generator) {

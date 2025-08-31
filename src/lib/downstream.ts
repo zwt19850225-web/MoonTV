@@ -106,11 +106,12 @@ function mapItemToResult(item: ApiSearchItem, apiSite: ApiSite, apiName: string)
 export async function* searchFromApiStream(
   apiSite: ApiSite,
   query: string,
-  parallel = true
+  parallel = true,
+  timeout?: number
 ): AsyncGenerator<SearchResult[], void, unknown> {
   const apiUrl = apiSite.api + API_CONFIG.search.path + encodeURIComponent(query);
 
-  const response = await fetchWithTimeout(apiUrl, { headers: API_CONFIG.search.headers });
+  const response = await fetchWithTimeout(apiUrl, { headers: API_CONFIG.search.headers }, timeout);
   if (!response.ok) return;
 
   const data = await response.json();
@@ -138,7 +139,7 @@ export async function* searchFromApiStream(
             .replace('{page}', page.toString());
 
         const promise = (async () => {
-          const pageRes = await fetchWithTimeout(pageUrl, { headers: API_CONFIG.search.headers });
+          const pageRes = await fetchWithTimeout(pageUrl, { headers: API_CONFIG.search.headers }, timeout);
           if (!pageRes.ok) return null;
 
           const pageData = await pageRes.json();
@@ -168,7 +169,7 @@ export async function* searchFromApiStream(
             .replace('{query}', encodeURIComponent(query))
             .replace('{page}', page.toString());
 
-        const pageRes = await fetchWithTimeout(pageUrl, { headers: API_CONFIG.search.headers });
+        const pageRes = await fetchWithTimeout(pageUrl, { headers: API_CONFIG.search.headers }, timeout);
         if (!pageRes.ok) continue;
 
         const pageData = await pageRes.json();
