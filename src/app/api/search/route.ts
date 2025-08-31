@@ -92,9 +92,20 @@ export async function GET(request: Request) {
         }
         return { siteResults, failed: null };
       } catch (err: any) {
+        let errorMessage = err.message || '未知的错误';
+        
+        // 根据错误类型提供更具体的错误信息
+        if (err.message === '请求超时') {
+          errorMessage = '请求超时';
+        } else if (err.message === '网络连接失败') {
+          errorMessage = '网络连接失败';
+        } else if (err.message.includes('网络错误')) {
+          errorMessage = '网络错误';
+        }
+        
         return {
           siteResults: [],
-          failed: { name: site.name, key: site.key, error: err.message || '未知的错误' },
+          failed: { name: site.name, key: site.key, error: errorMessage },
         };
       }
     });
@@ -165,7 +176,18 @@ export async function GET(request: Request) {
         }
       } catch (err: any) {
         console.warn(`搜索失败 ${site.name}:`, err.message);
-        failedSources.push({ name: site.name, key: site.key, error: err.message || '未知的错误' });
+        let errorMessage = err.message || '未知的错误';
+        
+        // 根据错误类型提供更具体的错误信息
+        if (err.message === '请求超时') {
+          errorMessage = '请求超时';
+        } else if (err.message === '请求失败') {
+          errorMessage = '请求失败';
+        } else if (err.message.includes('网络错误')) {
+          errorMessage = '网络错误';
+        }
+        
+        failedSources.push({ name: site.name, key: site.key, error: errorMessage });
         await safeWrite({ failedSources });
       }
     });
