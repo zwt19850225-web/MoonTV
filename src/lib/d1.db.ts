@@ -55,6 +55,21 @@ export class D1Storage implements IStorage {
     return result ? (result.id as number) : null;
   }
 
+  // 如果用户不存在则自动创建（角色默认为 user）
+  private async ensureUser(username: string): Promise<number> {
+    let userId = await this.getUserId(username);
+    if (userId) return userId;
+
+    await this.db
+      .prepare('INSERT INTO users (username, password, role) VALUES (?, ?, ?)')
+      .bind(username, '', 'user')
+      .run();
+
+    userId = await this.getUserId(username);
+    if (!userId) throw new Error('Failed to create user');
+    return userId;
+  }
+
   async registerUser(userName: string, password: string): Promise<void> {
     await this.db
       .prepare('INSERT INTO users (username, password) VALUES (?, ?)')
@@ -159,8 +174,7 @@ export class D1Storage implements IStorage {
     record: PlayRecord
   ): Promise<void> {
     const [source, videoId] = key.split('+');
-    const userId = await this.getUserId(userName);
-    if (!userId) throw new Error('User not found');
+    const userId = await this.ensureUser(userName);
 
     await this.db
       .prepare(
@@ -278,8 +292,7 @@ export class D1Storage implements IStorage {
     favorite: Favorite
   ): Promise<void> {
     const [source, videoId] = key.split('+');
-    const userId = await this.getUserId(userName);
-    if (!userId) throw new Error('User not found');
+    const userId = await this.ensureUser(userName);
 
     await this.db
       .prepare(
@@ -375,8 +388,7 @@ export class D1Storage implements IStorage {
   }
 
   async addSearchHistory(userName: string, keyword: string): Promise<void> {
-    const userId = await this.getUserId(userName);
-    if (!userId) throw new Error('User not found');
+    const userId = await this.ensureUser(userName);
 
     // 先删除已存在的相同关键词
     await this.db
@@ -605,8 +617,7 @@ export class D1Storage implements IStorage {
     id: string,
     config: SkipConfig
   ): Promise<void> {
-    const userId = await this.getUserId(userName);
-    if (!userId) throw new Error('User not found');
+    const userId = await this.ensureUser(userName);
 
     await this.db
       .prepare(
